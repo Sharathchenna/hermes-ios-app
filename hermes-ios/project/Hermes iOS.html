@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — iOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent-h: 55;
+    --bg: oklch(0.175 0.012 50);
+    --bg-2: oklch(0.205 0.013 50);
+    --surface: oklch(0.235 0.014 50);
+    --surface-2: oklch(0.275 0.016 50);
+    --line: oklch(0.32 0.014 55 / 0.9);
+    --line-soft: oklch(0.32 0.014 55 / 0.45);
+    --text: oklch(0.96 0.015 80);
+    --text-dim: oklch(0.78 0.018 70);
+    --text-mute: oklch(0.58 0.02 65);
+    --accent: oklch(0.78 0.14 var(--accent-h));
+    --accent-2: oklch(0.68 0.15 var(--accent-h));
+    --accent-soft: oklch(0.78 0.14 var(--accent-h) / 0.15);
+    --good: oklch(0.78 0.13 150);
+    --warn: oklch(0.78 0.14 40);
+    --danger: oklch(0.72 0.17 20);
+
+    --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, Menlo, monospace;
+    --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #0e0c0a; color: var(--text); font-family: var(--font-sans); }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 700px at 10% -10%, oklch(0.28 0.05 var(--accent-h) / 0.25), transparent 60%),
+      radial-gradient(900px 600px at 110% 110%, oklch(0.25 0.04 30 / 0.2), transparent 55%),
+      #0b0a08;
+    padding: 32px 16px 64px;
+  }
+
+  #root { display: block; }
+
+  button { font-family: inherit; color: inherit; }
+  input, textarea { font-family: inherit; color: inherit; }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="src/primitives.jsx"></script>
+  <script type="text/babel" src="src/data.jsx"></script>
+  <script type="text/babel" src="src/screen_onboarding.jsx"></script>
+  <script type="text/babel" src="src/screen_home.jsx"></script>
+  <script type="text/babel" src="src/screen_chat.jsx"></script>
+  <script type="text/babel" src="src/screen_skills.jsx"></script>
+  <script type="text/babel" src="src/screen_memory.jsx"></script>
+  <script type="text/babel" src="src/screen_schedules.jsx"></script>
+  <script type="text/babel" src="src/screen_subagents.jsx"></script>
+  <script type="text/babel" src="src/screen_settings.jsx"></script>
+  <script type="text/babel" src="src/app.jsx"></script>
+</body>
+</html>
