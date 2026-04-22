@@ -78,6 +78,13 @@ function ServerConfig() {
   const [url, setUrl] = React.useState(apiUrl);
   const [token, setToken] = React.useState(apiToken);
   const [testing, setTesting] = React.useState(false);
+  const [testError, setTestError] = React.useState<string | null>(null);
+
+  // Sync local state when store changes (e.g. on first load)
+  React.useEffect(() => {
+    setUrl(apiUrl);
+    setToken(apiToken);
+  }, [apiUrl, apiToken]);
 
   const save = async () => {
     await setApiUrl(url);
@@ -85,20 +92,53 @@ function ServerConfig() {
   };
 
   const test = async () => {
+    setTestError(null);
+    // Validate fields before even trying
+    if (!url.trim()) {
+      setTestError('Server URL is required');
+      return;
+    }
+    if (!token.trim()) {
+      setTestError('Auth token is required');
+      return;
+    }
+
     setTesting(true);
     await save();
-    await checkOnline();
+    try {
+      await checkOnline();
+      setTestError(null);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : 'Connection failed');
+    }
     setTesting(false);
   };
+
+  const configured = url.trim().length > 0 && token.trim().length > 0;
+  const statusLabel = testing
+    ? 'Testing…'
+    : !configured
+    ? 'Not configured'
+    : online
+    ? 'Connected'
+    : 'Connection failed';
+
+  const statusColor = testing
+    ? HermesColors.textMute
+    : !configured
+    ? HermesColors.warn
+    : online
+    ? HermesColors.good
+    : HermesColors.danger;
 
   return (
     <Group label="Server">
       <View style={styles.serverRow}>
         <Text style={styles.serverLabel}>URL</Text>
         <TextInput
-          style={styles.serverInput}
+          style={[styles.serverInput, !url.trim() && styles.serverInputEmpty]}
           value={url}
-          onChangeText={setUrl}
+          onChangeText={(t) => { setUrl(t); setTestError(null); }}
           onBlur={save}
           placeholder="https://hermes.example.com"
           placeholderTextColor={HermesColors.textMute}
@@ -109,9 +149,9 @@ function ServerConfig() {
       <View style={styles.serverRow}>
         <Text style={styles.serverLabel}>Token</Text>
         <TextInput
-          style={styles.serverInput}
+          style={[styles.serverInput, !token.trim() && styles.serverInputEmpty]}
           value={token}
-          onChangeText={setToken}
+          onChangeText={(t) => { setToken(t); setTestError(null); }}
           onBlur={save}
           placeholder="Bearer token"
           placeholderTextColor={HermesColors.textMute}
@@ -120,11 +160,14 @@ function ServerConfig() {
           secureTextEntry
         />
       </View>
+      {testError && (
+        <Text style={styles.testError}>{testError}</Text>
+      )}
       <TouchableOpacity style={styles.testBtn} onPress={test} disabled={testing}>
-        <Text style={styles.testBtnText}>
-          {testing ? 'Testing…' : online ? 'Connected' : 'Test connection'}
+        <Text style={[styles.testBtnText, { color: statusColor }]}>
+          {statusLabel}
         </Text>
-        <View style={[styles.statusDot, online ? styles.statusOnline : styles.statusOffline]} />
+        <View style={[styles.statusDot, online && configured ? styles.statusOnline : styles.statusOffline]} />
       </TouchableOpacity>
     </Group>
   );

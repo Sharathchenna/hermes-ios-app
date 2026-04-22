@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useChatStore, ChatMessage } from '@/stores/appStore';
+import { useChatStore, ChatMessage, useAppStore } from '@/stores/appStore';
 import { HermesColors } from '@/constants/theme';
 import {
   IconHermesMark,
@@ -110,6 +110,7 @@ function MessageBubble({ m }: { m: ChatMessage }) {
 
 export default function ChatScreen() {
   const { messages, input, busy, pending, contextPct, setInput, sendMessage, loadHistory } = useChatStore();
+  const online = useAppStore((s) => s.online);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -133,8 +134,10 @@ export default function ChatScreen() {
           <View>
             <Text style={styles.headerTitle}>Hermes</Text>
             <View style={styles.headerSub}>
-              <View style={[styles.headerDot, { backgroundColor: HermesColors.good }]} />
-              <Text style={styles.headerSubText}>awake · haiku · claude-sonnet fallback</Text>
+              <View style={[styles.headerDot, { backgroundColor: online ? HermesColors.good : HermesColors.danger }]} />
+              <Text style={styles.headerSubText}>
+                {online ? 'awake · haiku · claude-sonnet fallback' : 'offline · check settings'}
+              </Text>
             </View>
           </View>
         </View>

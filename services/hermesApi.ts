@@ -14,10 +14,10 @@ import {
   JobUpdateRequest,
   Job,
 } from '@/types/api';
-import { getApiUrl, getApiToken } from './apiConfig';
+import { getEffectiveUrl, getEffectiveToken, isConfigured } from './apiConfig';
 
 async function getHeaders(): Promise<Record<string, string>> {
-  const token = await getApiToken();
+  const token = await getEffectiveToken();
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
@@ -25,10 +25,15 @@ async function getHeaders(): Promise<Record<string, string>> {
 }
 
 async function getBaseUrl(): Promise<string> {
-  return getApiUrl();
+  return getEffectiveUrl();
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const configured = await isConfigured();
+  if (!configured) {
+    throw new Error('Not configured. Please set the server URL and token in Settings.');
+  }
+
   const baseUrl = await getBaseUrl();
   const headers = await getHeaders();
   const res = await fetch(`${baseUrl}${path}`, {
@@ -37,18 +42,28 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${text}`);
+    throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
   }
   return res.json() as Promise<T>;
 }
 
-// ---------- Health ----------
+// ---------- Health / Connection Test ----------
 
 export async function healthCheck(): Promise<{ status: string; platform: string }> {
   const baseUrl = await getBaseUrl();
   const res = await fetch(`${baseUrl}/health`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
+}
+
+// Tests that auth works by calling an endpoint that requires it
+export async function testAuth(): Promise<void> {
+  const configured = await isConfigured();
+  if (!configured) {
+    throw new Error('Not configured. Please set the server URL and token in Settings.');
+  }
+  // Try to list models (lightweight auth-required endpoint)
+  await apiFetch('/v1/models');
 }
 
 // ---------- Chat ----------
@@ -62,40 +77,86 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
 }
 
 export async function* streamChat(messages: ChatMessage[]): AsyncGenerator<string, void> {
-  const baseUrl = await getBaseUrl();
-  const headers = await getHeaders();
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ model: 'hermes-ios', messages, stream: true }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${text}`);
+  const configured = await isConfigured();
+  if (!configured) {
+    throw new Error('Not configured. Please set the server URL and token in Settings.');
   }
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error('No response body');
+  const baseUrl = await getBaseUrl();
+  const headers = await getHeaders();
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: 'hermes-ios', messages, stream: true }),
+    });
+  } catch (err) {
+    throw new Error(`Network error: ${err instanceof Error ? err.message : 'Unable to reach server'}`);
+  }
 
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Server error ${res.status}: ${text}`);
+  }
+
+  // Fallback for React Native or servers that don't support streaming
+  if (!res.body || typeof res.body.getReader !== 'function') {
+    const text = await res.text().catch(() => '');
+    if (!text) {
+      throw new Error('Server returned an empty response. Check that streaming is enabled on the server.');
+    }
+
+    // Try parsing as SSE (server may have sent all events in one chunk)
+    const lines = text.split('\n');
+    let fullContent = '';
+    for (const line of lines) {
+      const parsed = parseSSELine(line);
+      if (parsed === '[DONE]') break;
+      if (parsed && parsed.choices?.[0]?.delta?.content) {
+        fullContent += parsed.choices[0].delta.content;
+      }
+    }
+    if (fullContent) {
+      yield fullContent;
+      return;
+    }
+
+    // Try parsing as regular JSON (non-streaming fallback)
+    try {
+      const json = JSON.parse(text) as ChatCompletionResponse;
+      if (json.choices?.[0]?.message?.content) {
+        yield json.choices[0].message.content;
+        return;
+      }
+    } catch { /* not valid JSON */ }
+
+    throw new Error('Server returned an unexpected response format. Check that streaming is enabled on the server.');
+  }
+
+  const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
-    for (const line of lines) {
-      const parsed = parseSSELine(line);
-      if (parsed === '[DONE]') return;
-      if (parsed && parsed.choices[0]?.delta?.content) {
-        yield parsed.choices[0].delta.content;
+      for (const line of lines) {
+        const parsed = parseSSELine(line);
+        if (parsed === '[DONE]') return;
+        if (parsed && parsed.choices?.[0]?.delta?.content) {
+          yield parsed.choices[0].delta.content;
+        }
       }
     }
+  } finally {
+    reader.releaseLock();
   }
 }
 

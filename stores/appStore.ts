@@ -10,10 +10,11 @@ import {
   toggleJob,
   streamChat,
   healthCheck,
+  testAuth,
 } from '@/services/hermesApi';
 import {
-  setApiUrl,
-  setApiToken,
+  setApiUrl as saveApiUrl,
+  setApiToken as saveApiToken,
   getApiUrl,
   getApiToken,
 } from '@/services/apiConfig';
@@ -189,18 +190,19 @@ export const useAppStore = create<AppState>((set) => ({
   setUserName: (v) => set({ userName: v }),
 
   setApiUrl: async (v) => {
-    await setApiUrl(v);
-    set({ apiUrl: v });
+    await saveApiUrl(v);
+    set({ apiUrl: v, online: false });
   },
 
   setApiToken: async (v) => {
-    await setApiToken(v);
-    set({ apiToken: v });
+    await saveApiToken(v);
+    set({ apiToken: v, online: false });
   },
 
   checkOnline: async () => {
     try {
-      await healthCheck();
+      // testAuth validates both URL and token by calling an auth-required endpoint
+      await testAuth();
       set({ online: true });
     } catch {
       set({ online: false });
@@ -210,11 +212,15 @@ export const useAppStore = create<AppState>((set) => ({
   loadConfig: async () => {
     const [url, token] = await Promise.all([getApiUrl(), getApiToken()]);
     set({ apiUrl: url, apiToken: token });
-    // Try to check online
-    try {
-      await healthCheck();
-      set({ online: true });
-    } catch {
+    // Only check online if both are configured
+    if (url.trim() && token.trim()) {
+      try {
+        await testAuth();
+        set({ online: true });
+      } catch {
+        set({ online: false });
+      }
+    } else {
       set({ online: false });
     }
   },
