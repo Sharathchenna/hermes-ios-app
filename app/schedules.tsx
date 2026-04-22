@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useMemo } from 'react';
+import React, { useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -35,11 +35,15 @@ function parseDraft(t: string) {
 }
 
 export default function SchedulesScreen() {
-  const { schedules, toggle, add } = useSchedulesStore();
+  const { schedules, loading, error, toggle, add, load } = useSchedulesStore();
   const [composing, setComposing] = React.useState(false);
   const [draft, setDraft] = React.useState('');
   const [parsed, setParsed] = React.useState<{ name: string; cron: string } | null>(null);
   const bottomSheetRef = useRef<BottomSheetModal>(null);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDraft = (t: string) => {
     setDraft(t);
@@ -76,6 +80,16 @@ export default function SchedulesScreen() {
             <IconPlus size={14} color={HermesColors.bg} />
           </TouchableOpacity>
         </View>
+
+        {loading && <Text style={styles.statusText}>Loading schedules…</Text>}
+        {error && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={load}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.list}>
           {schedules.map((x) => (
@@ -383,5 +397,26 @@ const styles = StyleSheet.create({
     color: HermesColors.bg,
     fontSize: 14,
     fontWeight: '600',
+  },
+  statusText: {
+    textAlign: 'center',
+    color: HermesColors.textMute,
+    fontSize: 13,
+    paddingVertical: 20,
+  },
+  errorBox: {
+    alignItems: 'center',
+    padding: 20,
+    gap: 8,
+  },
+  errorText: {
+    color: HermesColors.danger,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  retryText: {
+    color: HermesColors.accent,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

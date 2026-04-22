@@ -6,11 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '@/stores/appStore';
 import { HermesColors, getAccentColor } from '@/constants/theme';
 import { IconHermesMark } from '@/components/ui/Icon';
+import { healthCheck } from '@/services/hermesApi';
 
 function Group({ label, children, danger }: { label: string; children: React.ReactNode; danger?: boolean }) {
   return (
@@ -71,6 +73,63 @@ const PLATFORMS = [
 
 const ACCENTS = [55, 30, 200, 280, 140];
 
+function ServerConfig() {
+  const { apiUrl, apiToken, setApiUrl, setApiToken, online, checkOnline } = useAppStore();
+  const [url, setUrl] = React.useState(apiUrl);
+  const [token, setToken] = React.useState(apiToken);
+  const [testing, setTesting] = React.useState(false);
+
+  const save = async () => {
+    await setApiUrl(url);
+    await setApiToken(token);
+  };
+
+  const test = async () => {
+    setTesting(true);
+    await save();
+    await checkOnline();
+    setTesting(false);
+  };
+
+  return (
+    <Group label="Server">
+      <View style={styles.serverRow}>
+        <Text style={styles.serverLabel}>URL</Text>
+        <TextInput
+          style={styles.serverInput}
+          value={url}
+          onChangeText={setUrl}
+          onBlur={save}
+          placeholder="https://hermes.example.com"
+          placeholderTextColor={HermesColors.textMute}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+      <View style={styles.serverRow}>
+        <Text style={styles.serverLabel}>Token</Text>
+        <TextInput
+          style={styles.serverInput}
+          value={token}
+          onChangeText={setToken}
+          onBlur={save}
+          placeholder="Bearer token"
+          placeholderTextColor={HermesColors.textMute}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+        />
+      </View>
+      <TouchableOpacity style={styles.testBtn} onPress={test} disabled={testing}>
+        <Text style={styles.testBtnText}>
+          {testing ? 'Testing…' : online ? 'Connected' : 'Test connection'}
+        </Text>
+        <View style={[styles.statusDot, online ? styles.statusOnline : styles.statusOffline]} />
+      </TouchableOpacity>
+    </Group>
+  );
+}
+
 export default function SettingsScreen() {
   const { accentHue, setAccentHue, density, setDensity, userName } = useAppStore();
   const [notifs, setNotifs] = React.useState(true);
@@ -112,6 +171,8 @@ export default function SettingsScreen() {
           <Row label="Runs on" value="dusk-vm · Daytona" meta="awake · $3/mo idle" />
           <Row label="Region" value="eu-west" />
         </Group>
+
+        <ServerConfig />
 
         <Group label="Behavior">
           <ToggleRow
@@ -389,5 +450,51 @@ const styles = StyleSheet.create({
   footText: {
     color: HermesColors.textMute,
     fontSize: 10.5,
+  },
+  serverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: HermesColors.lineSoft,
+    gap: 10,
+  },
+  serverLabel: {
+    fontSize: 14,
+    color: HermesColors.text,
+    width: 50,
+  },
+  serverInput: {
+    flex: 1,
+    fontSize: 14,
+    color: HermesColors.text,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: HermesColors.line,
+  },
+  testBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  testBtnText: {
+    fontSize: 14,
+    color: HermesColors.accent,
+    fontWeight: '500',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusOnline: {
+    backgroundColor: HermesColors.good,
+  },
+  statusOffline: {
+    backgroundColor: HermesColors.textMute,
   },
 });

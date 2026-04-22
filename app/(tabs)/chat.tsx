@@ -109,8 +109,12 @@ function MessageBubble({ m }: { m: ChatMessage }) {
 }
 
 export default function ChatScreen() {
-  const { messages, input, busy, pending, contextPct, setInput, sendMessage } = useChatStore();
+  const { messages, input, busy, pending, contextPct, setInput, sendMessage, loadHistory } = useChatStore();
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });

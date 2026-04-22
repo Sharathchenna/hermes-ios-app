@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { StyleSheet } from 'react-native';
+import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAppStore } from '@/stores/appStore';
@@ -16,6 +17,11 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const onboarded = useAppStore((s) => s.onboarded);
+  const loadConfig = useAppStore((s) => s.loadConfig);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   return (
     <GestureHandlerRootView style={styles.container}>

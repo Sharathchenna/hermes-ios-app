@@ -29,16 +29,19 @@ const LOG = [
 ];
 
 export default function SubagentsScreen() {
-  const { subagents, tick, incrementTick } = useSubagentsStore();
+  const { subagents, loading, error, load } = useSubagentsStore();
   const [open, setOpen] = React.useState<Subagent | null>(null);
+  const [tick, setTick] = React.useState(0);
   const bottomSheetRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
-    const t = setInterval(() => {
-      incrementTick();
-    }, 600);
-    return () => clearInterval(t);
-  }, [incrementTick]);
+    load();
+    const interval = setInterval(() => {
+      load();
+      setTick((t) => t + 1);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   const handleOpen = useCallback((sa: Subagent) => {
     setOpen(sa);
@@ -63,6 +66,16 @@ export default function SubagentsScreen() {
             </Text>
           </View>
         </View>
+
+        {loading && <Text style={styles.loadingText}>Loading subagents…</Text>}
+        {error && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={load}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.list}>
           {subagents.map((x) => (
@@ -433,5 +446,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: HermesColors.bg,
+  },
+  loadingText: {
+    textAlign: 'center',
+    color: HermesColors.textMute,
+    fontSize: 13,
+    paddingVertical: 20,
+  },
+  errorBox: {
+    alignItems: 'center',
+    padding: 20,
+    gap: 8,
+  },
+  errorText: {
+    color: HermesColors.danger,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  retryText: {
+    color: HermesColors.accent,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

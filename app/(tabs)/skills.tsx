@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useMemo } from 'react';
+import React, { useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,9 +23,13 @@ import {
 } from '@gorhom/bottom-sheet';
 
 export default function SkillsScreen() {
-  const { skills, query, filter, setQuery, setFilter } = useSkillsStore();
+  const { skills, query, filter, loading, error, setQuery, setFilter, load } = useSkillsStore();
   const [openSkill, setOpenSkill] = React.useState<Skill | null>(null);
   const bottomSheetRef = useRef<BottomSheetModal>(null);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const filtered = skills.filter((s) => {
     if (filter === 'auto' && !s.auto) return false;
@@ -79,6 +83,16 @@ export default function SkillsScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {loading && <Text style={styles.statusText}>Loading skills…</Text>}
+        {error && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={load}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.list}>
           {filtered.map((s) => (
@@ -477,5 +491,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: HermesColors.bg,
+  },
+  statusText: {
+    textAlign: 'center',
+    color: HermesColors.textMute,
+    fontSize: 13,
+    paddingVertical: 20,
+  },
+  errorBox: {
+    alignItems: 'center',
+    padding: 20,
+    gap: 8,
+  },
+  errorText: {
+    color: HermesColors.danger,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  retryText: {
+    color: HermesColors.accent,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
