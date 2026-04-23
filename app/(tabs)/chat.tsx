@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useChatStore, ChatMessage, useAppStore } from '@/stores/appStore';
+import { useChat, type UIMessage } from '@ai-sdk/react';
+import { useAppStore, loadChatHistory, saveChatHistory } from '@/stores/appStore';
 import { HermesColors } from '@/constants/theme';
 import {
   IconHermesMark,
@@ -23,12 +24,12 @@ import {
   IconTerminal,
 } from '@/components/ui/Icon';
 import Animated, {
-  FadeIn,
   useSharedValue,
   useAnimatedProps,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
+import { HermesTransport } from '@/services/hermesTransport';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -76,50 +77,93 @@ function TypingDots() {
   );
 }
 
-function MessageBubble({ m }: { m: ChatMessage }) {
-  if (m.kind === 'tool') {
+/** Extract plain text from a UIMessage's text parts */
+function getMessageText(message: UIMessage): string {
+  return message.parts
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join('');
+}
+
+function MessageBubble({ message }: { message: UIMessage }) {
+  const isUser = message.role === 'user';
+  const text = getMessageText(message);
+
+  // Handle tool invocations if the backend ever exposes them
+  const toolParts = message.parts.filter((p) => p.type.startsWith('tool-'));
+  if (toolParts.length > 0) {
     return (
       <View style={styles.toolCard}>
-        <View style={styles.toolHead}>
-          <IconBolt size={13} color={HermesColors.accent} />
-          <Text style={styles.toolName}>{m.tool}</Text>
-          <Text style={styles.toolDur}>{m.duration}</Text>
-        </View>
-        <Text style={styles.toolArgs}>→ {m.args}</Text>
-        <Text style={styles.toolResult}>✓ {m.result}</Text>
+        <Text style={styles.toolName}>Tool call</Text>
+        <Text style={styles.toolResult}>{JSON.stringify(toolParts, null, 2)}</Text>
       </View>
     );
   }
 
-  const isUser = m.role === 'user';
   return (
     <View>
       <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleHermes]}>
         <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextHermes]}>
-          {m.text}
+          {text}
         </Text>
       </View>
-      {m.ts && (
-        <Text style={[styles.bubbleTs, isUser ? styles.bubbleTsRight : styles.bubbleTsLeft]}>
-          {m.ts}
-        </Text>
-      )}
     </View>
   );
 }
 
 export default function ChatScreen() {
-  const { messages, input, busy, pending, contextPct, setInput, sendMessage, loadHistory } = useChatStore();
+  const chatId = useAppStore((s) => s.chatId);
   const online = useAppStore((s) => s.online);
+  const resetChat = useAppStore((s) => s.resetChat);
   const scrollRef = useRef<ScrollView>(null);
+  const [input, setInput] = useState('');
+  const [initialMessages, setInitialMessages] = useState<UIMessage[] | undefined>(undefined);
 
+  // Load persisted history on first mount
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    loadChatHistory().then((history) => {
+      if (history.length > 0) setInitialMessages(history);
+    });
+  }, []);
 
+  const { messages, sendMessage, status, error, setMessages } = useChat({
+    id: chatId || undefined,
+    transport: new HermesTransport(),
+    messages: initialMessages,
+    onFinish: ({ messages }) => {
+      saveChatHistory(messages);
+    },
+    onError: (err) => {
+      console.error('Chat error:', err);
+    },
+  });
+
+  // Sync loaded history into useChat once it's ready
+  useEffect(() => {
+    if (initialMessages && messages.length === 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages]);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages, pending]);
+  }, [messages]);
+
+  const busy = status === 'submitted' || status === 'streaming';
+  const isStreaming = status === 'streaming';
+
+  const handleSend = () => {
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput('');
+    sendMessage({ text });
+  };
+
+  const handleReset = () => {
+    resetChat();
+    setMessages([]);
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -128,106 +172,107 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
         {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <IconHermesMark size={24} color={HermesColors.accent} />
-          <View>
-            <Text style={styles.headerTitle}>Hermes</Text>
-            <View style={styles.headerSub}>
-              <View style={[styles.headerDot, { backgroundColor: online ? HermesColors.good : HermesColors.danger }]} />
-              <Text style={styles.headerSubText}>
-                {online ? 'awake · haiku · claude-sonnet fallback' : 'offline · check settings'}
-              </Text>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <IconHermesMark size={24} color={HermesColors.accent} />
+            <View>
+              <Text style={styles.headerTitle}>Hermes</Text>
+              <View style={styles.headerSub}>
+                <View style={[styles.headerDot, { backgroundColor: online ? HermesColors.good : HermesColors.danger }]} />
+                <Text style={styles.headerSubText}>
+                  {online ? 'awake · haiku · claude-sonnet fallback' : 'offline · check settings'}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-        <View style={styles.headerRight}>
-          <ContextRing pct={contextPct} />
-          <TouchableOpacity style={styles.iconBtn}>
-            <IconDots size={20} color={HermesColors.textDim} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Messages */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled">
-        <Text style={styles.daySep}>Today · Lisbon</Text>
-
-        {messages.map((m) => (
-          <MessageBubble key={m.id} m={m} />
-        ))}
-
-        {pending?.kind === 'typing' && (
-          <View style={[styles.bubble, styles.bubbleHermes]}>
-            <TypingDots />
+          <View style={styles.headerRight}>
+            <ContextRing pct={0.22} />
+            <TouchableOpacity style={styles.iconBtn} onPress={handleReset}>
+              <IconDots size={20} color={HermesColors.textDim} />
+            </TouchableOpacity>
           </View>
-        )}
-
-        {pending?.kind === 'thought' && (
-          <View style={styles.thought}>
-            <View style={styles.thoughtDot} />
-            <Text style={styles.thoughtText}>{pending.text}</Text>
-          </View>
-        )}
-
-        {pending?.kind === 'stream' && (
-          <View style={[styles.bubble, styles.bubbleHermes]}>
-            <Text style={styles.bubbleTextHermes}>
-              {pending.text}
-              <Text style={styles.caret}>|</Text>
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Composer */}
-      <View style={styles.composer}>
-        <View style={styles.compBar}>
-          <TouchableOpacity style={styles.compIcon}>
-            <IconPlus size={20} color={HermesColors.textDim} />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.compInput}
-            value={input}
-            onChangeText={setInput}
-            onSubmitEditing={sendMessage}
-            placeholder={busy ? 'Hermes is working…' : 'Message Hermes'}
-            placeholderTextColor={HermesColors.textMute}
-            editable={!busy}
-            returnKeyType="send"
-          />
-          <TouchableOpacity
-            style={[styles.compSend, (!input.trim() || busy) && styles.compSendDisabled]}
-            onPress={sendMessage}
-            disabled={!input.trim() || busy}>
-            {busy ? (
-              <IconPause size={18} color={HermesColors.bg} />
-            ) : (
-              <IconSend size={18} color={HermesColors.bg} />
-            )}
-          </TouchableOpacity>
         </View>
-        <View style={styles.compMeta}>
-          <TouchableOpacity style={styles.compPill}>
-            <IconBolt size={12} color={HermesColors.textMute} />
-            <Text style={styles.compPillText}>Skills auto</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.compPill}>
-            <IconWeb size={12} color={HermesColors.textMute} />
-            <Text style={styles.compPillText}>Web on</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.compPill}>
-            <IconTerminal size={12} color={HermesColors.textMute} />
-            <Text style={styles.compPillText}>dusk-vm</Text>
-          </TouchableOpacity>
+
+        {/* Messages */}
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled">
+          <Text style={styles.daySep}>Today · Lisbon</Text>
+
+          {messages.map((m) => (
+            <MessageBubble key={m.id} message={m} />
+          ))}
+
+          {status === 'submitted' && (
+            <View style={[styles.bubble, styles.bubbleHermes]}>
+              <TypingDots />
+            </View>
+          )}
+
+          {isStreaming && messages.length > 0 && (
+            <View style={[styles.bubble, styles.bubbleHermes]}>
+              <Text style={styles.bubbleTextHermes}>
+                {getMessageText(messages[messages.length - 1])}
+                <Text style={styles.caret}>|</Text>
+              </Text>
+            </View>
+          )}
+
+          {error && (
+            <View style={[styles.bubble, styles.bubbleHermes, { borderColor: HermesColors.danger }]}>
+              <Text style={[styles.bubbleTextHermes, { color: HermesColors.danger }]}>
+                {error.message}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Composer */}
+        <View style={styles.composer}>
+          <View style={styles.compBar}>
+            <TouchableOpacity style={styles.compIcon}>
+              <IconPlus size={20} color={HermesColors.textDim} />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.compInput}
+              value={input}
+              onChangeText={setInput}
+              onSubmitEditing={handleSend}
+              placeholder={busy ? 'Hermes is working…' : 'Message Hermes'}
+              placeholderTextColor={HermesColors.textMute}
+              editable={!busy}
+              returnKeyType="send"
+            />
+            <TouchableOpacity
+              style={[styles.compSend, (!input.trim() || busy) && styles.compSendDisabled]}
+              onPress={handleSend}
+              disabled={!input.trim() || busy}>
+              {busy ? (
+                <IconPause size={18} color={HermesColors.bg} />
+              ) : (
+                <IconSend size={18} color={HermesColors.bg} />
+              )}
+            </TouchableOpacity>
+          </View>
+          <View style={styles.compMeta}>
+            <TouchableOpacity style={styles.compPill}>
+              <IconBolt size={12} color={HermesColors.textMute} />
+              <Text style={styles.compPillText}>Skills auto</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.compPill}>
+              <IconWeb size={12} color={HermesColors.textMute} />
+              <Text style={styles.compPillText}>Web on</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.compPill}>
+              <IconTerminal size={12} color={HermesColors.textMute} />
+              <Text style={styles.compPillText}>dusk-vm</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
-  </SafeAreaView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -327,18 +372,6 @@ const styles = StyleSheet.create({
   bubbleTextHermes: {
     color: HermesColors.text,
   },
-  bubbleTs: {
-    fontSize: 10,
-    color: HermesColors.textMute,
-    marginTop: 2,
-    marginHorizontal: 4,
-  },
-  bubbleTsRight: {
-    textAlign: 'right',
-  },
-  bubbleTsLeft: {
-    textAlign: 'left',
-  },
   typing: {
     flexDirection: 'row',
     gap: 4,
@@ -349,28 +382,6 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: HermesColors.textMute,
-  },
-  thought: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
-  thoughtDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: HermesColors.accent,
-    marginTop: 8,
-  },
-  thoughtText: {
-    color: HermesColors.textMute,
-    fontSize: 12.5,
-    fontStyle: 'italic',
-    fontFamily: 'Georgia',
-    lineHeight: 18,
-    flex: 1,
   },
   toolCard: {
     alignSelf: 'flex-start',
@@ -383,25 +394,10 @@ const styles = StyleSheet.create({
     gap: 4,
     maxWidth: '90%',
   },
-  toolHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   toolName: {
     fontWeight: '500',
     color: HermesColors.accent,
     fontSize: 12,
-  },
-  toolDur: {
-    color: HermesColors.textMute,
-    fontSize: 10,
-    marginLeft: 'auto',
-  },
-  toolArgs: {
-    color: HermesColors.textDim,
-    fontSize: 12,
-    paddingLeft: 20,
   },
   toolResult: {
     color: HermesColors.text,

@@ -516,6 +516,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: HermesColors.line,
   },
+  serverInputEmpty: {
+    borderBottomColor: HermesColors.warn,
+  },
+  testError: {
+    color: HermesColors.danger,
+    fontSize: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
   testBtn: {
     flexDirection: 'row',
     alignItems: 'center',

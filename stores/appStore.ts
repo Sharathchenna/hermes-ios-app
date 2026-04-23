@@ -8,8 +8,6 @@ import {
   fetchJobs,
   createJob,
   toggleJob,
-  streamChat,
-  healthCheck,
   testAuth,
 } from '@/services/hermesApi';
 import {
@@ -19,6 +17,7 @@ import {
   getApiToken,
 } from '@/services/apiConfig';
 import type { SkillSummary, Job, RunSummary } from '@/types/api';
+import type { UIMessage } from 'ai';
 
 // ---------- Types ----------
 
@@ -65,30 +64,9 @@ export interface Subagent {
   spawned: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'hermes';
-  text?: string;
-  kind?: 'tool';
-  tool?: string;
-  args?: string;
-  result?: string;
-  duration?: string;
-  opensSubagent?: boolean;
-  ts?: string;
-}
-
-export interface PendingMessage {
-  kind: 'typing' | 'thought' | 'stream';
-  text: string;
-}
+export type HermesMessage = UIMessage;
 
 // ---------- Helpers ----------
-
-function nowShort() {
-  const d = new Date();
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 function hashId(text: string): string {
   return 'h' + text.split('').reduce((a, b) => a + b.charCodeAt(0), 0).toString(36);
@@ -137,22 +115,44 @@ function bridgeRun(r: RunSummary): Subagent {
   };
 }
 
-// ---------- Chat History Persistence ----------
+// ---------- Chat History Persistence (AI SDK format) ----------
 
-const CHAT_HISTORY_KEY = '@hermes_chat_history';
+const CHAT_HISTORY_KEY = '@hermes_chat_history_v2';
+const CHAT_SESSION_KEY = '@hermes_chat_session';
 
-async function saveChatHistory(messages: ChatMessage[]) {
+export async function saveChatHistory(messages: UIMessage[]) {
   try {
     await AsyncStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
   } catch { /* ignore */ }
 }
 
-async function loadChatHistory(): Promise<ChatMessage[]> {
+export async function loadChatHistory(): Promise<UIMessage[]> {
   try {
     const raw = await AsyncStorage.getItem(CHAT_HISTORY_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return [];
+}
+
+export async function getOrCreateChatId(): Promise<string> {
+  try {
+    const existing = await AsyncStorage.getItem(CHAT_SESSION_KEY);
+    if (existing) return existing;
+  } catch { /* ignore */ }
+  const id = 'chat-' + Date.now();
+  try {
+    await AsyncStorage.setItem(CHAT_SESSION_KEY, id);
+  } catch { /* ignore */ }
+  return id;
+}
+
+export async function resetChatSession(): Promise<string> {
+  const id = 'chat-' + Date.now();
+  try {
+    await AsyncStorage.setItem(CHAT_SESSION_KEY, id);
+    await AsyncStorage.removeItem(CHAT_HISTORY_KEY);
+  } catch { /* ignore */ }
+  return id;
 }
 
 // ---------- App Store ----------
@@ -165,6 +165,7 @@ interface AppState {
   apiUrl: string;
   apiToken: string;
   online: boolean;
+  chatId: string;
   setOnboarded: (v: boolean) => void;
   setAccentHue: (v: number) => void;
   setDensity: (v: 'compact' | 'comfortable') => void;
@@ -173,6 +174,7 @@ interface AppState {
   setApiToken: (v: string) => Promise<void>;
   checkOnline: () => Promise<void>;
   loadConfig: () => Promise<void>;
+  resetChat: () => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -183,6 +185,7 @@ export const useAppStore = create<AppState>((set) => ({
   apiUrl: 'https://hermes.sharathchenna.top',
   apiToken: 'ios-app-secret-key-change-this-in-production',
   online: false,
+  chatId: '',
 
   setOnboarded: (v) => set({ onboarded: v }),
   setAccentHue: (v) => set({ accentHue: v }),
@@ -210,8 +213,12 @@ export const useAppStore = create<AppState>((set) => ({
   },
 
   loadConfig: async () => {
-    const [url, token] = await Promise.all([getApiUrl(), getApiToken()]);
-    set({ apiUrl: url, apiToken: token });
+    const [url, token, chatId] = await Promise.all([
+      getApiUrl(),
+      getApiToken(),
+      getOrCreateChatId(),
+    ]);
+    set({ apiUrl: url, apiToken: token, chatId });
     // Only check online if both are configured
     if (url.trim() && token.trim()) {
       try {
@@ -224,76 +231,10 @@ export const useAppStore = create<AppState>((set) => ({
       set({ online: false });
     }
   },
-}));
 
-// ---------- Chat Store ----------
-
-interface ChatState {
-  messages: ChatMessage[];
-  input: string;
-  busy: boolean;
-  pending: PendingMessage | null;
-  contextPct: number;
-  setInput: (v: string) => void;
-  sendMessage: () => Promise<void>;
-  loadHistory: () => Promise<void>;
-}
-
-export const useChatStore = create<ChatState>((set, get) => ({
-  messages: [],
-  input: '',
-  busy: false,
-  pending: null,
-  contextPct: 0.22,
-
-  setInput: (v) => set({ input: v }),
-
-  loadHistory: async () => {
-    const history = await loadChatHistory();
-    set({ messages: history });
-  },
-
-  sendMessage: async () => {
-    const { input, busy, messages } = get();
-    const text = input.trim();
-    if (!text || busy) return;
-
-      const userMsg: ChatMessage = { id: 'u' + Date.now(), role: 'user' as const, text, ts: nowShort() };
-      const newMessages = [...messages, userMsg];
-      set({ messages: newMessages, input: '', busy: true });
-      await saveChatHistory(newMessages);
-
-    try {
-      const apiMessages = newMessages
-        .filter((m) => m.role === 'user' || (m.role === 'hermes' && m.text))
-        .map((m) => ({ role: (m.role === 'hermes' ? 'assistant' : 'user') as 'assistant' | 'user', content: m.text || '' }));
-
-      set({ pending: { kind: 'stream', text: '' } });
-
-      let fullText = '';
-      const stream = streamChat(apiMessages);
-      for await (const token of stream) {
-        fullText += token;
-        set({ pending: { kind: 'stream', text: fullText } });
-      }
-
-      set({ pending: null });
-      const hermesMsg: ChatMessage = { id: 'h' + Date.now(), role: 'hermes' as const, text: fullText, ts: nowShort() };
-      const finalMessages: ChatMessage[] = [...get().messages, hermesMsg];
-      set({ messages: finalMessages, busy: false });
-      await saveChatHistory(finalMessages);
-    } catch (err) {
-      set({ pending: null });
-      const errorMsg: ChatMessage = {
-        id: 'err' + Date.now(),
-        role: 'hermes' as const,
-        text: err instanceof Error ? err.message : 'Something went wrong.',
-        ts: nowShort(),
-      };
-      const finalMessages: ChatMessage[] = [...get().messages, errorMsg];
-      set({ messages: finalMessages, busy: false });
-      await saveChatHistory(finalMessages);
-    }
+  resetChat: async () => {
+    const chatId = await resetChatSession();
+    set({ chatId });
   },
 }));
 
