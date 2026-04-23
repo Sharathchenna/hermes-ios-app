@@ -64,8 +64,9 @@ export class HermesTransport extends HttpChatTransport<UIMessage> {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let messageId = '';
+    let textPartId = '';
     let started = false;
+    let textEnded = false;
 
     return new ReadableStream({
       async pull(controller) {
@@ -73,8 +74,8 @@ export class HermesTransport extends HttpChatTransport<UIMessage> {
           const { done, value } = await reader.read();
 
           if (done) {
-            if (started && messageId) {
-              controller.enqueue({ type: 'text-end', id: messageId });
+            if (started && textPartId && !textEnded) {
+              controller.enqueue({ type: 'text-end', id: textPartId });
               controller.enqueue({ type: 'finish', finishReason: 'stop' });
             }
             controller.close();
@@ -93,8 +94,8 @@ export class HermesTransport extends HttpChatTransport<UIMessage> {
             const payload = trimmed.slice(6);
 
             if (payload === '[DONE]') {
-              if (started && messageId) {
-                controller.enqueue({ type: 'text-end', id: messageId });
+              if (started && textPartId && !textEnded) {
+                controller.enqueue({ type: 'text-end', id: textPartId });
                 controller.enqueue({ type: 'finish', finishReason: 'stop' });
               }
               controller.close();
@@ -103,27 +104,26 @@ export class HermesTransport extends HttpChatTransport<UIMessage> {
 
             try {
               const chunk = JSON.parse(payload);
-              const id = chunk.id || messageId;
-              if (id) messageId = id;
-
               const delta = chunk.choices?.[0]?.delta;
               const finishReason = chunk.choices?.[0]?.finish_reason;
 
               if (delta?.content) {
                 if (!started) {
                   started = true;
-                  controller.enqueue({ type: 'start', messageId });
-                  controller.enqueue({ type: 'text-start', id: messageId });
+                  textPartId = chunk.id || '';
+                  controller.enqueue({ type: 'start', messageId: textPartId });
+                  controller.enqueue({ type: 'text-start', id: textPartId });
                 }
                 controller.enqueue({
                   type: 'text-delta',
                   delta: delta.content,
-                  id: messageId,
+                  id: textPartId,
                 });
               }
 
-              if (finishReason && started && messageId) {
-                controller.enqueue({ type: 'text-end', id: messageId });
+              if (finishReason && started && textPartId && !textEnded) {
+                textEnded = true;
+                controller.enqueue({ type: 'text-end', id: textPartId });
                 controller.enqueue({
                   type: 'finish',
                   finishReason: finishReason === 'stop' ? 'stop' : 'other',
