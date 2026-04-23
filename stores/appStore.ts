@@ -1,23 +1,23 @@
-import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  fetchSkills,
-  fetchMemory,
-  updateMemory,
-  fetchRuns,
-  fetchJobs,
-  createJob,
-  toggleJob,
-  testAuth,
-} from '@/services/hermesApi';
-import {
-  setApiUrl as saveApiUrl,
-  setApiToken as saveApiToken,
-  getApiUrl,
   getApiToken,
+  getApiUrl,
+  setApiToken as saveApiToken,
+  setApiUrl as saveApiUrl,
 } from '@/services/apiConfig';
-import type { SkillSummary, Job, RunSummary } from '@/types/api';
+import {
+  createJob,
+  fetchJobs,
+  fetchMemory,
+  fetchRuns,
+  fetchSkills,
+  testAuth,
+  toggleJob,
+  updateMemory,
+} from '@/services/hermesApi';
+import type { Job, RunSummary, SkillSummary } from '@/types/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UIMessage } from 'ai';
+import { create } from 'zustand';
 
 // ---------- Types ----------
 
@@ -265,7 +265,13 @@ export const useSkillsStore = create<SkillsState>((set) => ({
     set({ loading: true, error: null });
     try {
       const data = await fetchSkills();
-      set({ skills: data.map(bridgeSkill), loading: false });
+      let arr: SkillSummary[] = [];
+      if (Array.isArray(data)) {
+        arr = data;
+      } else if (data && typeof data === 'object' && 'skills' in data) {
+        arr = (data as { skills?: SkillSummary[] }).skills || [];
+      }
+      set({ skills: arr.map(bridgeSkill), loading: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Failed to load skills', loading: false });
     }

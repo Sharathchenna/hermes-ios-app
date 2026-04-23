@@ -1,35 +1,35 @@
-import React, { useRef, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useChat, type UIMessage } from '@ai-sdk/react';
-import { useAppStore, loadChatHistory, saveChatHistory } from '@/stores/appStore';
-import { HermesColors } from '@/constants/theme';
-import {
-  IconHermesMark,
+  IconBolt,
   IconDots,
+  IconHermesMark,
+  IconPause,
   IconPlus,
   IconSend,
-  IconPause,
-  IconBolt,
-  IconWeb,
   IconTerminal,
+  IconWeb,
 } from '@/components/ui/Icon';
+import { HermesColors } from '@/constants/theme';
+import { HermesTransport } from '@/services/hermesTransport';
+import { loadChatHistory, saveChatHistory, useAppStore } from '@/stores/appStore';
+import { useChat, type UIMessage } from '@ai-sdk/react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedProps,
+  useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { HermesTransport } from '@/services/hermesTransport';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -112,6 +112,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
 }
 
 export default function ChatScreen() {
+  const insets = useSafeAreaInsets();
   const chatId = useAppStore((s) => s.chatId);
   const online = useAppStore((s) => s.online);
   const resetChat = useAppStore((s) => s.resetChat);
@@ -230,7 +231,7 @@ export default function ChatScreen() {
         </ScrollView>
 
         {/* Composer */}
-        <View style={styles.composer}>
+        <View style={[styles.composer, { paddingBottom: Math.max(24, insets.bottom + 64) }]}>
           <View style={styles.compBar}>
             <TouchableOpacity style={styles.compIcon}>
               <IconPlus size={20} color={HermesColors.textDim} />

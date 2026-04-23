@@ -1,19 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useAppStore } from '@/stores/appStore';
-import { HermesColors } from '@/constants/theme';
 import {
-  IconChev,
-  IconSkills,
-  IconMemory,
-  IconClock,
   IconBranch,
+  IconChev,
+  IconClock,
   IconHermesMark,
+  IconMemory,
+  IconSkills,
   IconSpark,
 } from '@/components/ui/Icon';
+import { HermesColors } from '@/constants/theme';
+import { useAppStore, useMemoryStore, useSchedulesStore, useSkillsStore, useSubagentsStore } from '@/stores/appStore';
+import { useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const RECENT = [
   { id: 'r1', text: 'Ranked 4 flat listings for you', time: '2h', skill: 'apartment-scorer' },
@@ -24,6 +24,21 @@ const RECENT = [
 export default function HomeScreen() {
   const router = useRouter();
   const userName = useAppStore((s) => s.userName);
+
+  const { skills, load: loadSkills } = useSkillsStore();
+  const { memories, load: loadMemory } = useMemoryStore();
+  const { schedules, load: loadSchedules } = useSchedulesStore();
+  const { subagents, load: loadSubagents } = useSubagentsStore();
+
+  useEffect(() => {
+    loadSkills();
+    loadMemory();
+    loadSchedules();
+    loadSubagents();
+  }, [loadSkills, loadMemory, loadSchedules, loadSubagents]);
+
+  const runningSubagents = subagents.filter((s) => s.status === 'running').length;
+  const nextSchedule = schedules.find((s) => s.status === 'on');
 
   const hour = new Date().getHours();
   const greet =
@@ -66,8 +81,8 @@ export default function HomeScreen() {
               <IconSkills size={18} color={HermesColors.textDim} />
               <Text style={styles.tileLabel}>Skills</Text>
             </View>
-            <Text style={styles.tileNum}>12</Text>
-            <Text style={styles.tileSub}>2 new this week</Text>
+            <Text style={styles.tileNum}>{skills.length}</Text>
+            <Text style={styles.tileSub}>{skills.length > 0 ? `${skills.length} loaded` : 'No skills'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tile} onPress={() => router.push('/(tabs)/memory')}>
@@ -75,8 +90,10 @@ export default function HomeScreen() {
               <IconMemory size={18} color={HermesColors.textDim} />
               <Text style={styles.tileLabel}>Memory</Text>
             </View>
-            <Text style={styles.tileNum}>47</Text>
-            <Text style={styles.tileSub}>entries about you</Text>
+            <Text style={styles.tileNum}>{memories.length}</Text>
+            <Text style={styles.tileSub}>
+              {memories.length > 0 ? `${memories.filter((m) => m.kind === 'user').length} about you` : 'No entries'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tile} onPress={() => router.push('/schedules')}>
@@ -84,8 +101,10 @@ export default function HomeScreen() {
               <IconClock size={18} color={HermesColors.textDim} />
               <Text style={styles.tileLabel}>Schedules</Text>
             </View>
-            <Text style={styles.tileNum}>5</Text>
-            <Text style={styles.tileSub}>next at 7:00 tomorrow</Text>
+            <Text style={styles.tileNum}>{schedules.length}</Text>
+            <Text style={styles.tileSub}>
+              {nextSchedule ? `next ${nextSchedule.next}` : 'No upcoming schedules'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.tile} onPress={() => router.push('/subagents')}>
@@ -94,10 +113,12 @@ export default function HomeScreen() {
               <Text style={styles.tileLabel}>Subagents</Text>
             </View>
             <View style={styles.liveNumWrap}>
-              <Text style={[styles.tileNum, styles.tileNumLive]}>2</Text>
-              <View style={styles.liveDot} />
+              <Text style={[styles.tileNum, styles.tileNumLive]}>{runningSubagents}</Text>
+              {runningSubagents > 0 && <View style={styles.liveDot} />}
             </View>
-            <Text style={styles.tileSub}>working right now</Text>
+            <Text style={styles.tileSub}>
+              {runningSubagents > 0 ? 'working right now' : 'all done'}
+            </Text>
           </TouchableOpacity>
         </View>
 
