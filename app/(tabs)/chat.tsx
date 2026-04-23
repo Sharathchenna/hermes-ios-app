@@ -12,6 +12,7 @@ import { HermesColors } from '@/constants/theme';
 import { HermesTransport } from '@/services/hermesTransport';
 import { loadChatHistory, saveChatHistory, useAppStore } from '@/stores/appStore';
 import { useChat, type UIMessage } from '@ai-sdk/react';
+import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -119,6 +120,7 @@ export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState('');
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | undefined>(undefined);
+  const lastHapticLength = useRef(0);
 
   // Load persisted history on first mount
   useEffect(() => {
@@ -150,6 +152,23 @@ export default function ChatScreen() {
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
+
+  // Haptic feedback while streaming
+  useEffect(() => {
+    if (status === 'streaming' && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      const text = getMessageText(lastMsg);
+      if (text.length > lastHapticLength.current) {
+        // Trigger light haptic every ~8 characters to avoid over-triggering
+        if (text.length - lastHapticLength.current >= 8) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          lastHapticLength.current = text.length;
+        }
+      }
+    } else if (status !== 'streaming') {
+      lastHapticLength.current = 0;
+    }
+  }, [messages, status]);
 
   const busy = status === 'submitted' || status === 'streaming';
   const isStreaming = status === 'streaming';
