@@ -1,5 +1,5 @@
-import { Platform } from 'react-native';
 import structuredClone from '@ungap/structured-clone';
+import { Platform } from 'react-native';
 
 if (Platform.OS !== 'web') {
   const setupPolyfills = async () => {
@@ -17,9 +17,14 @@ if (Platform.OS !== 'web') {
 
     polyfillGlobal('TextEncoderStream', () => TextEncoderStream);
     polyfillGlobal('TextDecoderStream', () => TextDecoderStream);
+
+    // Use expo/fetch for true streaming support (getReader() works properly)
+    const { fetch: expoFetch } = await import('expo/fetch');
+    polyfillGlobal('fetch', () => expoFetch);
   };
 
   setupPolyfills();
 }
 
-export {};
+export { };
+
