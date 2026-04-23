@@ -1,20 +1,19 @@
 import {
-  ChatMessage,
   ChatCompletionResponse,
-  ChatCompletionStreamResponse,
-  parseSSELine,
-  SkillSummary,
-  SkillDetail,
+  ChatMessage,
+  Job,
+  JobCreateRequest,
+  JobsResponse,
+  JobUpdateRequest,
   MemoryResponse,
   MemoryUpdateRequest,
-  RunsResponse,
+  parseSSELine,
   RunDetail,
-  JobsResponse,
-  JobCreateRequest,
-  JobUpdateRequest,
-  Job,
+  RunsResponse,
+  SkillDetail,
+  SkillSummary
 } from '@/types/api';
-import { getEffectiveUrl, getEffectiveToken, isConfigured } from './apiConfig';
+import { getEffectiveToken, getEffectiveUrl, isConfigured } from './apiConfig';
 
 async function getHeaders(): Promise<Record<string, string>> {
   const token = await getEffectiveToken();
@@ -25,7 +24,8 @@ async function getHeaders(): Promise<Record<string, string>> {
 }
 
 async function getBaseUrl(): Promise<string> {
-  return getEffectiveUrl();
+  const url = await getEffectiveUrl();
+  return url.replace(/\/$/, '');
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -36,12 +36,15 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
   const baseUrl = await getBaseUrl();
   const headers = await getHeaders();
-  const res = await fetch(`${baseUrl}${path}`, {
+  const url = `${baseUrl}${path}`;
+  console.log('[apiFetch]', options?.method || 'GET', url);
+  const res = await fetch(url, {
     ...options,
     headers: { ...headers, ...(options?.headers || {}) },
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    console.error('[apiFetch] error:', res.status, text, 'URL:', url);
     throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
   }
   return res.json() as Promise<T>;
