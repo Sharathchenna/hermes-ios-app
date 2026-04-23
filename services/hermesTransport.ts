@@ -1,6 +1,6 @@
 import { HttpChatTransport, UIMessage, UIMessageChunk } from 'ai';
 import { fetch as expoFetch } from 'expo/fetch';
-import { getEffectiveUrl, getEffectiveToken } from './apiConfig';
+import { getEffectiveToken, getEffectiveUrl } from './apiConfig';
 
 /**
  * Custom AI SDK transport for the Hermes backend.
@@ -113,6 +113,7 @@ export class HermesTransport extends HttpChatTransport<UIMessage> {
                 if (!started) {
                   started = true;
                   controller.enqueue({ type: 'start', messageId });
+                  controller.enqueue({ type: 'text-start', id: messageId });
                 }
                 controller.enqueue({
                   type: 'text-delta',
