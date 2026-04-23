@@ -39,9 +39,10 @@ export async function loadApiConfig(): Promise<{ url: string; token: string }> {
   return { url, token };
 }
 
-// Returns true if the user has actually configured both URL and token
+// Returns true if both URL and token are available (either configured or using defaults)
 export async function isConfigured(): Promise<boolean> {
-  const { url, token } = await loadApiConfig();
+  const url = await getEffectiveUrl();
+  const token = await getEffectiveToken();
   return url.trim().length > 0 && token.trim().length > 0;
 }
 
